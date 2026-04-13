@@ -1,0 +1,197 @@
+# OSI - Unified Metadata & Behavior Spec (YAML Schema)
+version: 0.1.2
+# 
+# Goals:
+# - Standardization: Establish uniform language and structure for semantic model definitions
+# - Extensibility: Support domain-specific extensions while maintaining core compatibility
+# - Actionability (New): Integrate Behavior Layer (Action Types & Rules) to support AI Agent planning and execution
+# - Interoperability: Enable exchange and reuse across different AI and BI applications
+
+---
+# Enumerations
+# Standard enums used throughout the specification
+
+# Supported expression language dialects
+dialects:
+  - "ANSI_SQL"              # Standard SQL dialect
+  - "SNOWFLAKE"             # Snowflake
+  - "MDX"                   # Multi-Dimensional Expressions
+  - "TABLEAU"               # Tableau
+  - "DATABRICKS"            # Databricks SQL
+
+# Supported vendors for custom extensions
+vendors:
+  - "COMMON"                # Used for cross-platform Behavior Layer definitions
+  - "SNOWFLAKE"
+  - "SALESFORCE"
+  - "DBT"
+  - "DATABRICKS"
+
+---
+# Top-level semantic model definition
+semantic_model:
+  # Required: Unique identifier for the semantic model
+  - name: string
+
+    # Optional: Human-readable description of the semantic model
+    description: string
+
+    # Optional: Additional context for AI tools (e.g., custom prompts, instructions)
+    ai_context:
+      instructions: string
+      synonyms: []
+      examples: []
+
+    # Required: Collection of logical datasets (fact and dimension tables)
+    datasets: []
+
+    # Optional: Defines how logical datasets are connected
+    relationships: []
+
+    # Optional: Metrics spanning one or more logical datasets
+    metrics: []
+
+    # Optional: Vendor-specific attributes at the model level
+    custom_extensions:
+      - vendor_name: string  
+        data: string
+
+---
+# Logical Dataset Schema
+# Represents business entities or concepts (fact and dimension tables)
+datasets:
+  # Required: Unique identifier for the logical dataset
+  - name: string
+
+    # Required: Reference to the underlying physical table/view or query
+    source: string
+    
+    # Optional: Primary key definition that uniquely identifies rows
+    primary_key: []  # Array of column names (single or composite)
+
+    # Optional: Array of unique key definitions
+    unique_keys:
+      - []  # Array of column names (single or composite)
+
+    # Optional: Human-readable description
+    description: string
+
+    # Optional: Additional context for AI tools
+    ai_context:
+      synonyms: []
+
+    # Optional: Row-level calculations for grouping, filtering, and metric expressions
+    fields: []
+
+    # =====================================================================
+    # NEW: Behavior Layer Integration (Action Types & Rules)
+    # =====================================================================
+    # Embedded within custom_extensions to maintain core OSI compatibility.
+    # This layer defines what AI agents "can do" (Actions) and "must obey" (Rules).
+    custom_extensions:
+      - vendor_name: "COMMON"  # Recommended for standard behavior layer
+        data: |
+          {
+            "namespace": "string",               // e.g., "SALESFORCE_CRM"
+            "behavior_layer_version": "0.1",     // Version of the behavior schema
+            
+            // 1. Action Types: What actions can an Agent perform on this dataset?
+            "action_types": [
+              {
+                "id": "string",                  // Unique Action ID (e.g., "leads/convert")
+                "title": "string",               // Human-readable title
+                "kind": "string",                // "command" (write/execute) or "query" (read/fetch)
+                "operation": "string",           // e.g., "create", "update", "convert", "assign"
+                "aggregate": "string",           // DDD Aggregate root (e.g., "Lead")
+                "entity_name": "string",         // Matches dataset name
+                "idempotency": "string",         // "idempotent" or "non_idempotent"
+                "applies_to": {                  // Scope of the action
+                  "entity": "dataset"
+                },
+                "io_schema": {                   // Parameter schema for LLM function calling
+                  "input_schema": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["field_a"],     // Required parameters to execute action
+                    "properties": {
+                      "field_a": { "type": "string" },
+                      "field_b": { "type": "number" }
+                    }
+                  }
+                },
+                "examples": ["string"],          // Natural language triggers (e.g., "Convert this lead")
+                "tags": ["string"]               // Tags for routing/filtering
+              }
+            ],
+            
+            // 2. Rules: What business constraints and data quality rules apply?
+            "rules": [
+              {
+                "id": "string",                  // Unique Rule ID (e.g., "crm/rule_lead_conversion")
+                "title": "string",               // Short rule title
+                "severity": "string",            // "error", "warn", or "info"
+                "when": {                        // When does this rule apply?
+                  "entity": "dataset",           // Can be "dataset", "metric", "field"
+                  "selectors": {                 // Specific items this rule binds to
+                    "metric_names": ["string"]
+                  }
+                },
+                "constraint": {
+                  "type": "string"               // "filter", "naming", "security", etc.
+                },
+                "message": "string",             // Instruction for the LLM to obey
+                "remediation": "string",         // How to fix if violated
+                "tags": ["string"]
+              }
+            ]
+          }
+
+---
+# Fields Schema
+# Represents row-level attributes
+fields:
+  - name: string
+
+    # Required: Expression definition with dialect support
+    expression:
+      dialects:
+        - dialect: string       # e.g., "ANSI_SQL"
+          expression: string    # e.g., "leads.status"
+
+    # Optional: Dimension metadata
+    dimension:
+      is_time: boolean
+
+    description: string
+    
+    ai_context:
+      synonyms: []
+
+---
+# Relationship Schema
+# Defines how logical datasets are connected
+relationships:
+  - name: string
+    from: string             # Many-side dataset
+    to: string               # One-side dataset
+    from_columns: []         # Foreign keys
+    to_columns: []           # Primary/Unique keys
+    ai_context:
+      synonyms: []
+
+---
+# Metrics Schema
+# Quantitative measures defined on business data
+metrics:
+  - name: string
+
+    # Required: Aggregate SQL expressions
+    expression:
+      dialects:
+        - dialect: string       # e.g., "ANSI_SQL"
+          expression: string    # e.g., "SUM(CASE WHEN is_won THEN amount ELSE 0 END)"
+
+    description: string
+    
+    ai_context:
+      synonyms: []

@@ -1,0 +1,197 @@
+# OSI - 统一元数据与行为层规范 (YAML Schema)
+version: 0.1.2
+# 
+# 核心目标:
+# - 标准化 (Standardization): 为语义模型的定义建立统一的语言和结构
+# - 可扩展性 (Extensibility): 支持特定领域的扩展，同时保持核心规范的兼容性
+# - 可执行性 (Actionability) [新增]: 融入行为层 (Action Types & Rules)，支持 AI Agent 进行规划与执行
+# - 互操作性 (Interoperability): 实现在不同 AI 和 BI 应用之间的交换与复用
+
+---
+# 枚举值定义 (Enumerations)
+# 贯穿整个规范使用的标准枚举值
+
+# 支持的表达式语言方言
+dialects:
+  - "ANSI_SQL"              # 标准 SQL 方言
+  - "SNOWFLAKE"             # Snowflake SQL
+  - "MDX"                   # 多维表达式 (Multi-Dimensional Expressions)
+  - "TABLEAU"               # Tableau 表达式
+  - "DATABRICKS"            # Databricks SQL
+
+# 自定义扩展 (custom_extensions) 支持的供应商列表
+vendors:
+  - "COMMON"                # 用于跨平台的行为层定义 (Behavior Layer)
+  - "SNOWFLAKE"
+  - "SALESFORCE"
+  - "DBT"
+  - "DATABRICKS"
+
+---
+# 顶层语义模型定义 (Top-level semantic model definition)
+semantic_model:
+  # 必填: 语义模型的唯一标识符
+  - name: string
+
+    # 选填: 语义模型的人类可读描述
+    description: string
+
+    # 选填: 提供给 AI 工具的附加上下文（例如：自定义 Prompt，指令）
+    ai_context:
+      instructions: string  # 给大模型的系统级指令
+      synonyms: []          # 模型的同义词/别名
+      examples: []          # 自然语言提问示例
+
+    # 必填: 逻辑数据集集合 (事实表与维度表)
+    datasets: []
+
+    # 选填: 定义逻辑数据集之间如何连接 (外键关系)
+    relationships: []
+
+    # 选填: 跨越一个或多个逻辑数据集的指标定义
+    metrics: []
+
+    # 选填: 模型级别的供应商特定扩展属性
+    custom_extensions:
+      - vendor_name: string  
+        data: string
+
+---
+# 逻辑数据集规范 (Logical Dataset Schema)
+# 代表业务实体或概念 (事实表与维度表)
+datasets:
+  # 必填: 逻辑数据集的唯一标识符
+  - name: string
+
+    # 必填: 引用底层的物理表/视图或 SQL 查询
+    source: string
+    
+    # 选填: 唯一标识数据行的主键定义
+    primary_key: []  # 列名数组 (单列或复合主键)
+
+    # 选填: 唯一键定义数组
+    unique_keys:
+      - []  # 列名数组 (单列或复合唯一键)
+
+    # 选填: 人类可读的描述
+    description: string
+
+    # 选填: 提供给 AI 工具的附加上下文
+    ai_context:
+      synonyms: []  # 数据集的同义词/别名
+
+    # 选填: 用于分组、过滤以及构成指标表达式的行级计算字段
+    fields: []
+
+    # =====================================================================
+    # 新增: 行为层集成 (Behavior Layer: Action Types & Rules)
+    # =====================================================================
+    # 嵌套在 custom_extensions 内部，以保持 OSI 核心兼容性。
+    # 该层定义了 AI Agent 能够“做什么” (Actions) 以及“必须遵守什么” (Rules)。
+    custom_extensions:
+      - vendor_name: "COMMON"  # 推荐使用 COMMON 作为标准行为层的 vendor
+        data: |
+          {
+            "namespace": "string",               // 例如："SALESFORCE_CRM"
+            "behavior_layer_version": "0.1",     // 行为层 Schema 版本
+            
+            // 1. 动作类型 (Action Types): Agent 可以在这个数据集上执行哪些动作？
+            "action_types": [
+              {
+                "id": "string",                  // 全局唯一的动作 ID (例如："leads/convert")
+                "title": "string",               // 人类可读的短标题
+                "kind": "string",                // "command" (写/执行) 或 "query" (读/查询)
+                "operation": "string",           // 例如："create", "update", "convert", "assign"
+                "aggregate": "string",           // DDD 聚合根 (例如："Lead")
+                "entity_name": "string",         // 匹配 dataset 的 name
+                "idempotency": "string",         // "idempotent" (幂等) 或 "non_idempotent" (非幂等)
+                "applies_to": {                  // 动作的作用范围
+                  "entity": "dataset"
+                },
+                "io_schema": {                   // 用于 LLM Function Calling 的参数 Schema
+                  "input_schema": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["field_a"],     // 执行动作必填的参数
+                    "properties": {
+                      "field_a": { "type": "string" },
+                      "field_b": { "type": "number" }
+                    }
+                  }
+                },
+                "examples": ["string"],          // 触发该动作的自然语言示例 (例如："转化这条线索")
+                "tags": ["string"]               // 用于路由或过滤的标签
+              }
+            ],
+            
+            // 2. 规则 (Rules): 适用于该数据集的业务约束和数据质量规则是什么？
+            "rules": [
+              {
+                "id": "string",                  // 全局唯一的规则 ID (例如："crm/rule_lead_conversion")
+                "title": "string",               // 规则的短标题
+                "severity": "string",            // 严重程度："error", "warn", 或 "info"
+                "when": {                        // 规则在什么时候适用？
+                  "entity": "dataset",           // 可以是 "dataset", "metric", 或 "field"
+                  "selectors": {                 // 该规则具体绑定的目标名称
+                    "metric_names": ["string"]
+                  }
+                },
+                "constraint": {
+                  "type": "string"               // 约束类型："filter", "naming", "security" 等
+                },
+                "message": "string",             // 要求 LLM 遵守的指令文本
+                "remediation": "string",         // 如果违反该规则的修复建议
+                "tags": ["string"]               // 规则标签
+              }
+            ]
+          }
+
+---
+# 字段规范 (Fields Schema)
+# 代表行级别的属性
+fields:
+  - name: string
+
+    # 必填: 包含方言支持的表达式定义
+    expression:
+      dialects:
+        - dialect: string       # 例如："ANSI_SQL"
+          expression: string    # 例如："leads.status"
+
+    # 选填: 维度元数据
+    dimension:
+      is_time: boolean          # 是否为时间维度
+
+    description: string
+    
+    ai_context:
+      synonyms: []
+
+---
+# 关联映射规范 (Relationship Schema)
+# 定义逻辑数据集之间如何进行连接 (外键关系)
+relationships:
+  - name: string
+    from: string             # 关系中的“多”端数据集 (Many-side)
+    to: string               # 关系中的“一”端数据集 (One-side)
+    from_columns: []         # 外键列
+    to_columns: []           # 主键/唯一键列
+    ai_context:
+      synonyms: []
+
+---
+# 指标规范 (Metrics Schema)
+# 定义在业务数据之上的定量计算度量
+metrics:
+  - name: string
+
+    # 必填: 聚合 SQL 表达式
+    expression:
+      dialects:
+        - dialect: string       # 例如："ANSI_SQL"
+          expression: string    # 例如："SUM(CASE WHEN is_won THEN amount ELSE 0 END)"
+
+    description: string
+    
+    ai_context:
+      synonyms: []
